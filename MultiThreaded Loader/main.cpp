@@ -5,6 +5,7 @@
 #include <thread>
 #include <mutex>
 #include "resource.h"
+#include <SDL.h>
 
 // CONFIGURATION --------------------------------
 #define WINDOW_CLASS_NAME L"MultiThreaded Loader Tool"
@@ -425,6 +426,8 @@ int WINAPI WinMain(HINSTANCE _hInstance,
 {
 	// Create and register a window, duh!
 	HWND _hwnd = CreateAndRegisterWindow(_hInstance);
+	SDL_Init(SDL_INIT_EVERYTHING);
+
 
 	// We failed to create a window :(.
 	if (!_hwnd)
