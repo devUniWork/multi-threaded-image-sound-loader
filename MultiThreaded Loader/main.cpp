@@ -6,6 +6,7 @@
 #include <mutex>
 #include "resource.h"
 #include <SDL.h>
+#include <iostream>
 
 // CONFIGURATION --------------------------------
 #define WINDOW_CLASS_NAME L"MultiThreaded Loader Tool"
@@ -405,7 +406,7 @@ int WINAPI WinMain(HINSTANCE _hInstance,
 {
 	// Create and register a window, duh!
 	HWND _hwnd = CreateAndRegisterWindow(_hInstance);
-	SDL_Init(SDL_INIT_EVERYTHING);
+	// SDL_Init(SDL_INIT_EVERYTHING);
 
 
 	// We failed to create a window :(.
@@ -413,6 +414,55 @@ int WINAPI WinMain(HINSTANCE _hInstance,
 	{
 		return 1;
 	}
+
+
+
+
+	const int init_result = SDL_Init(SDL_INIT_EVERYTHING);
+	const int init_result_success = 0;
+	if (init_result != init_result_success)
+	{
+		std::cout << "Failed to initialize SDL" << std::endl;
+		std::cout << "SDL Error: " << SDL_GetError() << std::endl;
+		exit(1);
+	}
+
+	// Init Mixer
+//	const int mixer_init_result = Mix_Init(MIX_INIT_MOD);
+	const int mixer_init_failure = 0;
+	if (mixer_init_result == mixer_init_failure)
+	{
+		std::cout << "Failed to initialize SDL Mixer" << std::endl;
+		std::cout << "SDL Error: " << SDL_GetError() << std::endl;
+	//	std::cout << "Mixer Error: " << Mix_GetError() << std::endl;
+		exit(1);
+	}
+
+	// Ready Mixer for audio
+//	const int mixer_open_audio_result = Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 1024);
+	const int mixer_open_audio_success = 0;
+	if (mixer_open_audio_result != mixer_open_audio_success)
+	{
+		std::cout << "Failed to open audio" << std::endl;
+		std::cout << "SDL Error: " << SDL_GetError() << std::endl;
+		exit(1);
+	}
+
+	// Create 3 channels
+//	Mix_AllocateChannels(3);
+
+	// Play 3 audio clips on different channels
+	Mix_Chunk* data = nullptr;
+	data = Mix_LoadWAV("1.wav");
+	Mix_PlayChannel(0, data, -1);
+
+	data = Mix_LoadWAV("2.wav");
+	Mix_PlayChannel(1, data, -1);
+
+	data = Mix_LoadWAV("3.wav");
+	Mix_PlayChannel(2, data, -1);
+
+
 
 	// Enter main event loop
 	MSG msg;
