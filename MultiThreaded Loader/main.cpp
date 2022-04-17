@@ -5,8 +5,10 @@
 #include <thread>
 #include <mutex>
 #include "resource.h"
-#include <SDL.h>
 #include <iostream>
+#include <SDL_mixer.h>
+#include <SDL.h>
+
 
 // CONFIGURATION --------------------------------
 #define WINDOW_CLASS_NAME L"MultiThreaded Loader Tool"
@@ -157,7 +159,7 @@ bool ChooseSoundFilesToLoad(HWND _hwnd)
 */
 void LoadImageIntoImages(std::wstring pathToImageToLoad)
 {
-	HBITMAP loadedImage = HBITMAP( LoadImageW(NULL, (LPCWSTR)pathToImageToLoad.c_str(), IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE ));
+	HBITMAP loadedImage = HBITMAP(LoadImageW(NULL, (LPCWSTR)pathToImageToLoad.c_str(), IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE ));
 	const bool loadFailed = loadedImage == NULL;
 	if(loadFailed)
 	{
@@ -168,50 +170,30 @@ void LoadImageIntoImages(std::wstring pathToImageToLoad)
 	g_LoadImageIntoImages_mutex.lock();
 	g_vecLoadedImages.push_back(loadedImage);
 	g_LoadImageIntoImages_mutex.unlock();
-
-	// tell windows to render bitmap
-
-
-
-	// By the end here, we have loaded the image into g_vecLoadedImages.
-}
-
-bool PlaySoundsInParallel(std::wstring pathToSoundToLoad)
-{
-	bool play = bool(PlaySound((LPCWSTR)pathToSoundToLoad.c_str(), NULL, SND_FILENAME|SND_ASYNC));
-	const bool loadFailed = play == NULL;
-	if (loadFailed)
-	{
-		throw "Failed to sound image :(.";
-
-	}
-	return play;
 }
 
 
-void LoadSoundIntoSounds(std::wstring pathToSoundToLoad)
+void PlaySoundMultiThreaded(std::wstring pathToSound, int channel)
 {
 
+	Mix_Chunk* data = nullptr;
+	std::string s(pathToSound.begin(), pathToSound.end());
+	data = Mix_LoadWAV(s.c_str());
+    Mix_PlayChannel(channel, data, -1);
 
-	bool(*fcnPtr1)(std::wstring){ &PlaySoundsInParallel };
-
-	std::vector<std::thread> threads;
-	for (int i = 0; i < 2; ++i) {
-		threads.push_back(std::thread(PlaySoundsInParallel, std::ref(pathToSoundToLoad)));
-	}
-
-	for (int i = 0; i < 2 ; i++) {
-		threads[i].join();
-	}
 }
+
 
 void DrawImages(HWND _hwnd, HBITMAP loadedImage, int imageIndex, int bottomIndex)
 {
 
 		RECT rect;
+		
 		HDC hdc = GetDC(_hwnd);
 		HBRUSH brush = CreatePatternBrush(loadedImage);
 		rect.left = 0;
+		
+		
 
 		if (imageIndex < 2) {
 			SetRect(&rect, 256 * imageIndex, 0, 256 * imageIndex + 256, 256);
@@ -255,6 +237,7 @@ LRESULT CALLBACK WindowProc(HWND _hwnd, UINT _uiMsg, WPARAM _wparam, LPARAM _lpa
 	{
 
 		_hWindowDC = BeginPaint(_hwnd, &ps);
+
 		//Do all our painting here
 
 		EndPaint(_hwnd, &ps);
@@ -306,11 +289,13 @@ LRESULT CALLBACK WindowProc(HWND _hwnd, UINT _uiMsg, WPARAM _wparam, LPARAM _lpa
 					++imageIndex;
 					imageLock.unlock();
 				}
-				int idx = 0;
-				for (HBITMAP loadedImage : g_vecLoadedImages){
-					threads[idx].join();
-					++idx;
+
+				for (auto& thread : threads){
+					thread.join();
 				}
+				// clear images for each load
+				g_vecLoadedImages.clear();
+				g_vecImageFileNames.clear();
 				
 			}
 			else
@@ -325,21 +310,43 @@ LRESULT CALLBACK WindowProc(HWND _hwnd, UINT _uiMsg, WPARAM _wparam, LPARAM _lpa
 		{
 			if (ChooseSoundFilesToLoad(_hwnd))
 			{
-				// Audio will be marked with 4 audio clips.
-
-							// Step 1: LOAD IMAGES IN PARALLEL.
-				// Now for each file name, we need to load the image in parallel using threads.
-				// I can use c++ to do this, using <fstream>.
 				std::vector<std::thread> threadPool;
+				int channel = 0;
+				std::mutex soundLock;
+
+				const int init_result = SDL_Init(SDL_INIT_AUDIO);
+
+				const int init_result_success = 0;
+				if (init_result != init_result_success)
+				{
+					std::cout << "Failed to initialize SDL" << std::endl;
+					std::cout << "SDL Error: " << SDL_GetError() << std::endl;
+					exit(1);
+				}
+
+				if (Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 2048) < 0)
+					std::cout << "SDL Error: " << SDL_GetError() << std::endl;
+
+
+
+				// Create channel for each sound.
+				Mix_AllocateChannels(g_vecSoundFileNames.size());
+
+
 				for (std::wstring soundFileName : g_vecSoundFileNames)
 				{
-					threadPool.push_back(std::thread(LoadSoundIntoSounds, soundFileName));
+					soundLock.lock();
+					threadPool.push_back(std::thread(PlaySoundMultiThreaded, soundFileName, channel));
+					++channel;
+					soundLock.unlock();
 				}
 
 				for (auto& thread : threadPool)
 				{
 					thread.join();
 				}
+
+				g_vecSoundFileNames.clear();
 
 			}
 			else
@@ -427,7 +434,7 @@ int WINAPI WinMain(HINSTANCE _hInstance,
 {
 	// Create and register a window, duh!
 	HWND _hwnd = CreateAndRegisterWindow(_hInstance);
-	// SDL_Init(SDL_INIT_EVERYTHING);
+
 
 
 	// We failed to create a window :(.
@@ -435,53 +442,6 @@ int WINAPI WinMain(HINSTANCE _hInstance,
 	{
 		return 1;
 	}
-
-
-
-
-	const int init_result = SDL_Init(SDL_INIT_EVERYTHING);
-	const int init_result_success = 0;
-	if (init_result != init_result_success)
-	{
-		std::cout << "Failed to initialize SDL" << std::endl;
-		std::cout << "SDL Error: " << SDL_GetError() << std::endl;
-		exit(1);
-	}
-
-	// Init Mixer
-//	const int mixer_init_result = Mix_Init(MIX_INIT_MOD);
-	const int mixer_init_failure = 0;
-	if (mixer_init_result == mixer_init_failure)
-	{
-		std::cout << "Failed to initialize SDL Mixer" << std::endl;
-		std::cout << "SDL Error: " << SDL_GetError() << std::endl;
-	//	std::cout << "Mixer Error: " << Mix_GetError() << std::endl;
-		exit(1);
-	}
-
-	// Ready Mixer for audio
-//	const int mixer_open_audio_result = Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 1024);
-	const int mixer_open_audio_success = 0;
-	if (mixer_open_audio_result != mixer_open_audio_success)
-	{
-		std::cout << "Failed to open audio" << std::endl;
-		std::cout << "SDL Error: " << SDL_GetError() << std::endl;
-		exit(1);
-	}
-
-	// Create 3 channels
-//	Mix_AllocateChannels(3);
-
-	// Play 3 audio clips on different channels
-	Mix_Chunk* data = nullptr;
-	data = Mix_LoadWAV("1.wav");
-	Mix_PlayChannel(0, data, -1);
-
-	data = Mix_LoadWAV("2.wav");
-	Mix_PlayChannel(1, data, -1);
-
-	data = Mix_LoadWAV("3.wav");
-	Mix_PlayChannel(2, data, -1);
 
 
 
