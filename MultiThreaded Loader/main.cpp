@@ -9,7 +9,7 @@
 // CONFIGURATION --------------------------------
 #define WINDOW_CLASS_NAME L"MultiThreaded Loader Tool"
 const unsigned int _kuiWINDOWWIDTH = 512;
-const unsigned int _kuiWINDOWHEIGHT = 512;
+const unsigned int _kuiWINDOWHEIGHT = 570;
 #define MAX_FILES_TO_OPEN 50
 #define MAX_CHARACTERS_IN_FILENAME 25
 
@@ -201,13 +201,27 @@ void LoadSoundIntoSounds(std::wstring pathToSoundToLoad)
 	for (int i = 0; i < 2 ; i++) {
 		threads[i].join();
 	}
+}
+
+void DrawImages(HWND _hwnd, HBITMAP loadedImage, int imageIndex, int bottomIndex)
+{
+
+		RECT rect;
+		HDC hdc = GetDC(_hwnd);
+		HBRUSH brush = CreatePatternBrush(loadedImage);
+		rect.left = 0;
+
+		if (imageIndex < 2) {
+			SetRect(&rect, 256 * imageIndex, 0, 256 * imageIndex + 256, 256);
+		}
+		else {
+			SetRect(&rect, 256 * bottomIndex, 256, 256 * bottomIndex + 256, 512);
+		}
 
 
-
-
-
-//	std::wstring soundfile(L"C:\\Windows\\Media\\ding.wav");
-//	PlaySoundW(pathToSoundToLoad.c_str(), NULL, SND_SYNC);
+		FillRect(hdc, &rect, brush);
+		DeleteObject(brush);
+		ReleaseDC(_hwnd, hdc);
 }
 
 /*
@@ -274,20 +288,27 @@ LRESULT CALLBACK WindowProc(HWND _hwnd, UINT _uiMsg, WPARAM _wparam, LPARAM _lpa
 				// For marking I will use 4 unique square images -- each 256x256 pixels,
 				// and a screen size of 512x512 -- thus you can stack two on each horizontal and vertical.
 				// Drawing images in parallel requires using the win32 API.
-				int imageIndex = 0;
-				for(HBITMAP loadedImage : g_vecLoadedImages)
-				{
-					RECT rect;
-					HDC hdc = GetDC(_hwnd);
-					HBRUSH brush = CreatePatternBrush(loadedImage);
-					rect.left = 0;
-					SetRect(&rect, 375 * imageIndex, 0, 375 * imageIndex + 375, 373);
-					FillRect(hdc, &rect, brush);
-					DeleteObject(brush);
-					ReleaseDC(_hwnd, hdc);
-					++imageIndex;
-				}
 
+
+				std::vector<std::thread> threads;
+				std::mutex imageLock;
+				int imageIndex = 0;
+				int bottomIndex = 0;
+				for (HBITMAP loadedImage : g_vecLoadedImages)
+				{
+					imageLock.lock();
+					threads.push_back(std::thread(DrawImages, std::ref(_hwnd), loadedImage, imageIndex, bottomIndex));
+					if (imageIndex > 1) {
+						++bottomIndex;
+				    }
+					++imageIndex;
+					imageLock.unlock();
+				}
+				int idx = 0;
+				for (HBITMAP loadedImage : g_vecLoadedImages){
+					threads[idx].join();
+					++idx;
+				}
 				
 			}
 			else
